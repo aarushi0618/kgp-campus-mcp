@@ -1,0 +1,66 @@
+{
+  "discovered": [
+    "https://gymkhana.iitkgp.ac.in/",
+    "https://gymkhana.iitkgp.ac.in/achievements",
+    "https://gymkhana.iitkgp.ac.in/api/v1/categories",
+    "https://gymkhana.iitkgp.ac.in/api/v1/posts",
+    "https://gymkhana.iitkgp.ac.in/awards",
+    "https://gymkhana.iitkgp.ac.in/committees/socult",
+    "https://gymkhana.iitkgp.ac.in/committees/sports",
+    "https://gymkhana.iitkgp.ac.in/committees/tech",
+    "https://gymkhana.iitkgp.ac.in/committees/welfare",
+    "https://gymkhana.iitkgp.ac.in/contacts",
+    "https://gymkhana.iitkgp.ac.in/council",
+    "https://gymkhana.iitkgp.ac.in/council-members",
+    "https://gymkhana.iitkgp.ac.in/elections",
+    "https://gymkhana.iitkgp.ac.in/events",
+    "https://gymkhana.iitkgp.ac.in/faq",
+    "https://gymkhana.iitkgp.ac.in/gc",
+    "https://gymkhana.iitkgp.ac.in/gc-results",
+    "https://gymkhana.iitkgp.ac.in/governance",
+    "https://gymkhana.iitkgp.ac.in/governance/council",
+    "https://gymkhana.iitkgp.ac.in/governance/elections",
+    "https://gymkhana.iitkgp.ac.in/governance/nominations",
+    "https://gymkhana.iitkgp.ac.in/hall-of-fame",
+    "https://gymkhana.iitkgp.ac.in/hall_of_fame",
+    "https://gymkhana.iitkgp.ac.in/halloffame",
+    "https://gymkhana.iitkgp.ac.in/halloffame/awards",
+    "https://gymkhana.iitkgp.ac.in/halloffame/gc",
+    "https://gymkhana.iitkgp.ac.in/halloffame/gc-results",
+    "https://gymkhana.iitkgp.ac.in/halloffame/inter-iit",
+    "https://gymkhana.iitkgp.ac.in/halloffame/interiit",
+    "https://gymkhana.iitkgp.ac.in/honours",
+    "https://gymkhana.iitkgp.ac.in/inter-iit",
+    "https://gymkhana.iitkgp.ac.in/interiit",
+    "https://gymkhana.iitkgp.ac.in/letter-to-you",
+    "https://gymkhana.iitkgp.ac.in/nominations",
+    "https://gymkhana.iitkgp.ac.in/office-bearers",
+    "https://gymkhana.iitkgp.ac.in/results/gc",
+    "https://gymkhana.iitkgp.ac.in/results/interiit",
+    "https://gymkhana.iitkgp.ac.in/societies",
+    "https://gymkhana.iitkgp.ac.in/videos/hls/playlist.m3u8",
+    "https://gymkhana.iitkgp.ac.in/videos/hls/playlist0.ts",
+    "https://gymkhana.iitkgp.ac.in/videos/hls/playlist1.ts",
+    "https://www.google-analytics.com/g/collect"
+  ],
+  "working_routes": {
+    "https://gymkhana.iitkgp.ac.in/awards": {
+      "url": "https://gymkhana.iitkgp.ac.in/awards",
+      "status": 200,
+      "title": "Hall Of Fame | TSG",
+      "is_404": false
+    },
+    "https://gymkhana.iitkgp.ac.in/elections": {
+      "url": "https://gymkhana.iitkgp.ac.in/elections",
+      "status": 200,
+      "title": "Elections 2025-2026 | TSG",
+      "is_404": false
+    },
+    "https://gymkhana.iitkgp.ac.in/nominations": {
+      "url": "https://gymkhana.iitkgp.ac.in/nominations",
+      "status": 200,
+      "title": "Nominations 2025-2026 | TSG",
+      "is_404": false
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "source": "Coordinates sourced from OpenStreetMap, Google Maps, and IIT KGP campus map. Static data — halls don't move.",
+  "last_updated": "2026-10-05",
+  "bbox": {"south": 22.28, "west": 87.27, "north": 22.36, "east": 87.35},
+  "halls": [
+    {"name": "Atal Bihari Vajpayee Hall of Residence", "latitude": 22.3138, "longitude": 87.3069},
+    {"name": "Azad Hall of Residence",                  "latitude": 22.3176, "longitude": 87.3086},
+    {"name": "B C Roy Hall of Residence",               "latitude": 22.3145, "longitude": 87.3063},
+    {"name": "B R Ambedkar Hall of Residence",          "latitude": 22.3138, "longitude": 87.3059},
+    {"name": "Gokhale Hall of Residence",               "latitude": 22.3155, "longitude": 87.3093},
+    {"name": "Homi J Bhabha Hall of Residence",         "latitude": 22.3141, "longitude": 87.3076},
+    {"name": "Jagadish Chandra Bose Hall of Residence", "latitude": 22.3127, "longitude": 87.3082},
+    {"name": "Lala Lajpat Rai Hall of Residence",       "latitude": 22.3151, "longitude": 87.3086},
+    {"name": "Lalbahadur Sastry Hall of Residence",     "latitude": 22.3170, "longitude": 87.3068},
+    {"name": "Madan Mohan Malviya Hall of Residence",   "latitude": 22.3132, "longitude": 87.3079},
+    {"name": "Megnad Saha Hall of Residence",           "latitude": 22.3135, "longitude": 87.3095},
+    {"name": "Mother Teresa Hall of Residence",         "latitude": 22.3139, "longitude": 87.3103},
+    {"name": "Nehru Hall of Residence",                 "latitude": 22.3188, "longitude": 87.3103},
+    {"name": "Nivedita Hall of Residence",              "latitude": 22.3143, "longitude": 87.3113},
+    {"name": "Patel Hall of Residence",                 "latitude": 22.3182, "longitude": 87.3088},
+    {"name": "Radha Krishnan Hall of Residence",        "latitude": 22.3183, "longitude": 87.3066},
+    {"name": "Rajendra Prasad Hall of Residence",       "latitude": 22.3179, "longitude": 87.3098},
+    {"name": "Rani Laxmibai Hall of Residence",         "latitude": 22.3142, "longitude": 87.3099},
+    {"name": "SAM Hall of Residence",                   "latitude": 22.3172, "longitude": 87.3081},
+    {"name": "Indira Gandhi Hall of Residence",         "latitude": 22.3147, "longitude": 87.3104},
+    {"name": "Vidyasagar Hall of Residence",            "latitude": 22.3155, "longitude": 87.3102},
+    {"name": "Zakir Hussain Hall of Residence",         "latitude": 22.3187, "longitude": 87.3112}
+  ]
+}

@@ -3,14 +3,17 @@ import sqlite3
 import json
 import time
 import logging
+from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = "kgp_mcp_cache.db"
+# Resolve absolute path to project root (KGP-MCP/kgp-campus-mcp/kgp_mcp_cache.db)
+DB_PATH = Path(__file__).resolve().parent.parent.parent / "kgp_mcp_cache.db"
 
 def init_db():
     """Initialize the cache table."""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS cache (

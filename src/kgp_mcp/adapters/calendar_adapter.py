@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 class CalendarAdapter(SourceAdapter):
     """Adapter for IIT KGP Academic Calendar (PDF based)."""
+    
+    DEFAULT_TTL = 86400  # 24 hours — semi-static
 
     def __init__(self, url: str = ""):
         self.url = url
