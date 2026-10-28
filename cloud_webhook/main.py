@@ -89,7 +89,32 @@ async def receive_whatsapp_notification(payload: WebhookPayload):
         logger.error("Error processing webhook notification: %s", e, exc_info=True)
         return {"status": "success", "error": "Internal processing caught safely"}
 
+class EmailPayload(BaseModel):
+    """Payload sent by MacroDroid for Gmail notifications."""
+    user_id: str = Field(..., description="Student roll number")
+    email_text: str = Field(..., description="Notification text from email")
 
+# Placeholder for the extractor (we will assume Antigravity added this to extractor.py)
+# from extractor import extract_deadline_from_email
+
+@app.post("/api/email")
+async def receive_email_notification(payload: EmailPayload):
+    """Webhook endpoint to receive, parse, and persist academic deadlines."""
+    try:
+        logger.info("Received email notification for user [%s]: %s", payload.user_id, payload.email_text[:100])
+        
+        # For now, let's just log it to prove the endpoint works. 
+        # Once you add the Gemini extractor, we will uncomment the lines below.
+        
+        # extracted = await extract_deadline_from_email(payload.email_text)
+        # if extracted and extracted.get("is_academic"):
+        #     await save_deadline(payload.user_id, payload.email_text, extracted)
+        #     return {"status": "success", "message": "Deadline saved"}
+        
+        return {"status": "success", "message": "Email received, extraction pending"}
+    except Exception as e:
+        logger.error("Error processing email: %s", e, exc_info=True)
+        return {"status": "success", "error": "Internal processing caught safely"}
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
