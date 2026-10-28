@@ -2,6 +2,9 @@
 import logging
 import re
 import uuid
+import json
+import os
+from pathlib import Path
 from typing import Dict, List
 
 import httpx
@@ -53,6 +56,19 @@ class GymkhanaHTMLAdapter(SourceAdapter):
             return r.text
 
     async def parse(self, raw: str) -> List[CampusEntity]:
+        # 1. FAST PATH: If tag is societies, load from JSON dump (No LLM needed)
+        if self.tag == "societies":
+            fallback_path = Path(__file__).resolve().parent.parent.parent.parent / "data" / "societies_dump.json"
+            if fallback_path.exists():
+                logger.info(f"[{self.tag}] Loading societies from JSON dump.")
+                with open(fallback_path, "r", encoding="utf-8") as f:
+                    items = json.load(f)
+                    return [e for e in (self.to_campus_entity(item) for item in items) if e]
+            else:
+                logger.warning(f"[{self.tag}] JSON dump not found. Run scripts/sync_societies.py")
+                return []
+
+        # 2. SLOW PATH: Use LLM for other pages (Awards, GC results, etc.)
         soup = BeautifulSoup(raw, "html.parser")
         for tag in soup.find_all(["script", "style", "nav", "footer", "header"]):
             tag.decompose()
@@ -63,17 +79,15 @@ class GymkhanaHTMLAdapter(SourceAdapter):
             schema_description=self.schema_description,
             example_json=self.example_json,
         )
-        logger.info(f"[{self.tag}] Extracted {len(items)} items via LLM.")
-
+        
         entities = []
         for item in items:
-            e = self.to_campus_entity(item)   # ← uses ABC method
+            e = self.to_campus_entity(item)
             if e:
                 entities.append(e)
         return entities
 
     def to_campus_entity(self, item: Dict) -> CampusEntity | None:
-        """ABC-compliant: convert one extracted item into a CampusEntity."""
         title = (
             item.get("name") or item.get("title")
             or item.get("event") or item.get("society") or ""
@@ -81,7 +95,6 @@ class GymkhanaHTMLAdapter(SourceAdapter):
         if not title:
             return None
 
-        # Unique ID from UUID + title prefix (no index needed)
         uid = uuid.uuid4().hex[:8]
         safe_title = re.sub(r"[^a-zA-Z0-9]", "_", title[:30])
         safe_id = f"{self.tag}_{uid}_{safe_title}"[:80]

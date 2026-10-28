@@ -6,6 +6,7 @@ Falls back gracefully if the API key is missing.
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from google import genai
@@ -13,11 +14,36 @@ from google.genai import types
 
 logger = logging.getLogger(__name__)
 
+# Find .env file in project root if present
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
+ENV_FILE = ROOT_DIR / ".env"
+
+
+def _load_env_file():
+    if not ENV_FILE.exists():
+        return
+    try:
+        with open(ENV_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip("'\"")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception as e:
+        logger.warning(f"Failed to read .env file: {e}")
+
+
+_load_env_file()
+
 
 class LLMExtractor:
     """Convert unstructured text into structured JSON using Gemini."""
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.0-flash"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-3.8-flash"):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.model = model
         self.client = genai.Client(api_key=self.api_key) if self.api_key else None
@@ -64,6 +90,7 @@ TEXT:
             )
             data = json.loads(response.text)
             return data if isinstance(data, list) else []
-        except Exception as e:
-            logger.error(f"LLM extraction failed: {e}")
+
+        except Exception:
+            logger.exception("LLM extraction failed")
             return []

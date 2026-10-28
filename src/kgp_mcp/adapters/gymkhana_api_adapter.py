@@ -33,47 +33,66 @@ class GymkhanaAPIAdapter(SourceAdapter):
         self.limit = limit
         self._source_url = f"{GYMKHANA_API}/posts"
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        reraise=True,
-    )
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
     async def fetch(self) -> dict:
-        params = {"page": 1, "limit": self.limit}
-        if self.is_event is not None:
-            params["is_event"] = str(self.is_event).lower()
-        if self.category:
-            params["category"] = self.category
+        all_posts = []
+        page = 1
+        total_pages = 1
 
-        logger.info(f"[GymkhanaAPI] GET {self._source_url} params={params}")
         async with httpx.AsyncClient() as client:
-            r = await client.get(
-                self._source_url,
-                params=params,
-                timeout=15.0,
-                headers={"User-Agent": "KGP-Campus-MCP/0.1 (educational)"},
-            )
-            r.raise_for_status()
-            return r.json()
+            while page <= total_pages:
+                params = {"page": page, "limit": 100}
+                if self.is_event is not None:
+                    params["is_event"] = str(self.is_event).lower()
+                if self.category:
+                    params["category"] = self.category
+
+                r = await client.get(
+                    self._source_url, params=params, timeout=15.0,
+                    headers={"User-Agent": "KGP-Campus-MCP/0.1"},
+                )
+                r.raise_for_status()
+                data = r.json()
+                all_posts.extend(data.get("posts", []))
+
+                pagination = data.get("pagination", {})
+                total_pages = pagination.get("totalPages", 1)
+                page += 1
+
+        return {"posts": all_posts}
 
     async def parse(self, raw: dict) -> List[CampusEntity]:
         posts = raw.get("posts", [])
         entities = []
         for post in posts:
-            e = self.to_campus_entity(post)   # ← uses ABC method
-            if e:
-                entities.append(e)
+            try:
+                e = self.to_campus_entity(post)
+                if e:
+                    entities.append(e)
+            except Exception as err:
+                logger.warning(f"[GymkhanaAPI] Skipping malformed post: {err}")
         logger.info(f"[GymkhanaAPI] Parsed {len(entities)} items.")
         return entities
 
     def to_campus_entity(self, post: dict) -> Optional[CampusEntity]:
-        """ABC-compliant: convert one post dict into a CampusEntity."""
-        title = (post.get("title") or "").strip()
+        """ABC-compliant: convert one post dict into a CampusEntity without strict datetime parsing."""
+        if not isinstance(post, dict):
+            return None
+
+        title = str(post.get("title") or "").strip()
         if not title:
             return None
 
-        is_event = post.get("is_event", False)
+        is_event = bool(post.get("is_event", False))
+        if self.is_event is not None and is_event != self.is_event:
+            return None
+
         entity_type = "event" if is_event else "notice"
+
+        # Safe string fallback for dates (never calls datetime.fromisoformat)
+        raw_event_date = post.get("event_date")
+        raw_created_at = post.get("created_at")
+        event_date_str = str(raw_event_date or raw_created_at or "").strip()
 
         meta = {
             "society": post.get("society_name"),
@@ -81,7 +100,7 @@ class GymkhanaAPIAdapter(SourceAdapter):
             "society_logo": post.get("society_logo"),
             "category": post.get("category_name"),
             "event_category": post.get("event_category"),
-            "event_date": post.get("event_date"),
+            "event_date": event_date_str,
             "event_mode": post.get("event_mode"),
             "reg_deadline": post.get("reg_deadline"),
             "apply_link": post.get("apply_link"),
@@ -92,10 +111,9 @@ class GymkhanaAPIAdapter(SourceAdapter):
         }
         meta = {k: v for k, v in meta.items() if v is not None}
 
-        description = (post.get("description") or "")
+        description = str(post.get("description") or "")
         description = " ".join(description.split())[:2000]
 
-        # Use UUID from post ID or fallback to a random one
         raw_id = str(post.get("id") or uuid.uuid4().hex)[:8]
 
         return CampusEntity(

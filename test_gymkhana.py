@@ -1,7 +1,8 @@
 """Manual test: fetch and print Gymkhana data."""
 import asyncio
+import pytest
 
-
+@pytest.mark.asyncio
 async def test_api():
     from kgp_mcp.adapters.gymkhana_api_adapter import GymkhanaAPIAdapter
 
@@ -17,7 +18,7 @@ async def test_api():
         print(f"     Date:     {e.metadata.get('event_date')}")
         print(f"     Category: {e.metadata.get('category')}\n")
 
-
+@pytest.mark.asyncio
 async def test_llm():
     from kgp_mcp.config import GYMKHANA_LLM_SECTIONS
     from kgp_mcp.adapters.gymkhana_adapter import GymkhanaHTMLAdapter
@@ -33,7 +34,7 @@ async def test_llm():
         print(f"  🏛  {e.title}")
         print(f"     {e.description[:100]}\n")
 
-
+@pytest.mark.asyncio
 async def main():
     await test_api()
     # Uncomment after setting GEMINI_API_KEY:

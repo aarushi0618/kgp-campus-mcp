@@ -1,0 +1,12 @@
+# Ignore secrets
+.env
+cloud_webhook/.env
+
+# Ignore massive data files
+data/
+*.db
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+.pytest_cache/

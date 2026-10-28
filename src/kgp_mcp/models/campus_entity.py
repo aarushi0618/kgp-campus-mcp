@@ -16,9 +16,12 @@ class TimetableSlot(BaseModel):
 class CampusEntity(BaseModel):
     """Normalized campus entity — the common shape all adapters return."""
     id: str = Field(..., description="Globally unique ID, e.g. 'course:cs60050'")
+    
+    # ADDED "faculty" to the allowed types here:
     entity_type: Literal[
-        "course", "event", "location", "hall", "notice", "calendar_entry"
+        "course", "event", "location", "hall", "notice", "calendar_entry", "faculty"
     ] = Field(..., description="Discriminator for entity subtype")
+    
     title: str = Field(..., description="Human-readable title")
     description: Optional[str] = Field(None, description="Free-text description")
     source_url: str = Field(..., description="Origin URL scraped/parsed from")
@@ -30,4 +33,3 @@ class CampusEntity(BaseModel):
         default_factory=dict,
         description="Entity-type-specific extension fields",
     )
-    
