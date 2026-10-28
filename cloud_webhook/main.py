@@ -1,8 +1,11 @@
 """Standalone 24/7 FastAPI Cloud Webhook Server for KGP Campus Intelligence.
 
-Receives incoming WhatsApp notifications via HTTP POST from MacroDroid,
-extracts structured campus events using Google Gemini, and records them
-into PostgreSQL/SQLite.
+Receives:
+1. Incoming WhatsApp notifications via POST /webhook/whatsapp
+2. Incoming academic emails via POST /api/email
+
+Extracts structured campus events and academic deadlines using Google Gemini,
+and persists them into PostgreSQL/Supabase (or local SQLite).
 """
 from contextlib import asynccontextmanager
 import logging
@@ -10,8 +13,8 @@ import sys
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from database import init_db, save_event
-from extractor import extract_event_details
+from database import init_db, save_event, save_deadline
+from extractor import extract_event_details, extract_deadline_from_email
 
 # Configure logging
 logging.basicConfig(
@@ -37,17 +40,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="KGP Campus Intelligence Webhook",
-    description="Webhook listener for automated WhatsApp campus event extraction",
-    version="1.0.0",
+    description="Webhook listener for automated WhatsApp campus event & academic email deadline extraction",
+    version="1.1.0",
     lifespan=lifespan,
 )
 
 
 class WebhookPayload(BaseModel):
-    """Payload sent by MacroDroid HTTP POST request."""
+    """Payload sent by MacroDroid HTTP POST request for WhatsApp notifications."""
 
     group_name: str = Field(..., description="WhatsApp group or chat name")
     message: str = Field(..., description="Notification body / message text")
+
+
+class EmailPayload(BaseModel):
+    """Payload sent for academic email deadline extraction."""
+
+    user_id: str = Field(..., description="Student Roll Number (e.g. 25CH10025)")
+    email_text: str = Field(..., description="Raw email body / subject text")
 
 
 @app.get("/")
@@ -89,32 +99,51 @@ async def receive_whatsapp_notification(payload: WebhookPayload):
         logger.error("Error processing webhook notification: %s", e, exc_info=True)
         return {"status": "success", "error": "Internal processing caught safely"}
 
-class EmailPayload(BaseModel):
-    """Payload sent by MacroDroid for Gmail notifications."""
-    user_id: str = Field(..., description="Student roll number")
-    email_text: str = Field(..., description="Notification text from email")
-
-# Placeholder for the extractor (we will assume Antigravity added this to extractor.py)
-# from extractor import extract_deadline_from_email
 
 @app.post("/api/email")
-async def receive_email_notification(payload: EmailPayload):
-    """Webhook endpoint to receive, parse, and persist academic deadlines."""
+async def receive_academic_email(payload: EmailPayload):
+    """Endpoint to receive student emails, extract academic deadlines via Gemini,
+    and persist them to the AcademicDeadline table in Supabase/PostgreSQL.
+
+    CRITICAL FAIL-SAFE: Wrapped entirely in try/except and always returns 200 OK.
+    """
     try:
-        logger.info("Received email notification for user [%s]: %s", payload.user_id, payload.email_text[:100])
-        
-        # For now, let's just log it to prove the endpoint works. 
-        # Once you add the Gemini extractor, we will uncomment the lines below.
-        
-        # extracted = await extract_deadline_from_email(payload.email_text)
-        # if extracted and extracted.get("is_academic"):
-        #     await save_deadline(payload.user_id, payload.email_text, extracted)
-        #     return {"status": "success", "message": "Deadline saved"}
-        
-        return {"status": "success", "message": "Email received, extraction pending"}
+        logger.info("Received email for user [%s]: %s", payload.user_id, payload.email_text[:100])
+
+        # Step 1: Extract academic deadline details via Gemini
+        extracted = await extract_deadline_from_email(payload.email_text)
+
+        # Step 2: If is_academic is true, save to the AcademicDeadline table
+        is_academic = bool(extracted.get("is_academic")) if extracted else False
+        if is_academic and extracted.get("title"):
+            logger.info(
+                "Academic deadline detected: '%s' (urgency=%s). Saving to database...",
+                extracted.get("title"),
+                extracted.get("urgency_weight"),
+            )
+            saved_record = await save_deadline(
+                user_id=payload.user_id,
+                raw_email=payload.email_text,
+                extracted_data=extracted,
+            )
+            logger.info("Saved deadline ID: %s", saved_record.id)
+            return {
+                "status": "success",
+                "is_academic": True,
+                "deadline_id": str(saved_record.id),
+                "title": saved_record.title,
+                "urgency_weight": saved_record.urgency_weight,
+            }
+        else:
+            logger.info("Email is not an academic deadline.")
+            return {"status": "success", "is_academic": False, "deadline_id": None}
+
     except Exception as e:
-        logger.error("Error processing email: %s", e, exc_info=True)
+        # Always return 200 OK so upstream forwarders/MacroDroid do not retry
+        logger.error("Error processing email deadline: %s", e, exc_info=True)
         return {"status": "success", "error": "Internal processing caught safely"}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

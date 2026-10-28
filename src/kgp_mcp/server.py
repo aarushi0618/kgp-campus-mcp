@@ -26,6 +26,10 @@ from kgp_mcp.infrastructure.database import (
 )
 from kgp_mcp.infrastructure.osm_client import OSMClient
 from kgp_mcp.models.campus_entity import CampusEntity
+from kgp_mcp.services.planner_service import (
+    get_fused_daily_timeline as _get_fused_daily_timeline,
+    SYSTEM_DIRECTIVE_TEXT,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -565,6 +569,29 @@ async def smart_activity_planner(
         error_msg = traceback.format_exc()
         logger.error(f"smart_activity_planner crashed: {error_msg}")
         return f"Could not generate planner recommendation: {e}"
+
+
+@mcp.tool()
+async def get_fused_daily_timeline(user_id: str, target_date: str) -> str:
+    """Fuse local SQLite classes on target_date, cloud Supabase WhatsApp events on target_date,
+    and cloud Supabase academic deadlines within the next 7 days into a unified daily timeline.
+    """
+    try:
+        return await _get_fused_daily_timeline(user_id=user_id, target_date=target_date)
+    except Exception as e:
+        error_msg = traceback.format_exc()
+        logger.error(f"get_fused_daily_timeline crashed: {error_msg}")
+        try:
+            ERROR_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(ERROR_LOG_FILE, "a", encoding="utf-8") as f:
+                f.write(f"\n--- Error in get_fused_daily_timeline ---\n{error_msg}\n")
+        except Exception:
+            pass
+        return (
+            f"Cloud data unavailable, showing local classes only.\n\n"
+            f"Error loading timeline: {e}\n\n"
+            f"{SYSTEM_DIRECTIVE_TEXT}"
+        )
 
 
 # ---------------- Unified Search ----------------
