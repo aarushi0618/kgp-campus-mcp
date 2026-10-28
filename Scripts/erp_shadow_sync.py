@@ -1,11 +1,13 @@
 """Personalized Student ERP Timetable Sync Daemon (Shadow Sync Pipeline).
 
 Target: https://erp.iitkgp.ac.in/Acad/student/view_stud_time_table.jsp
-Authenticates using iitkgp-erp-login, parses the visual timetable grid,
-stores the student schedule in campus_cache.db (user_classes table),
-and dumps data/debug_student_timetable.html for inspection.
+Authenticates using iitkgp-erp-login, parses the visual timetable grid
+respecting the Odd/Even roll number parity split, stores the student
+schedule in campus_cache.db (user_classes table), and dumps
+data/debug_student_timetable.html for inspection.
 """
 import asyncio
+import json
 import os
 from pathlib import Path
 import re
@@ -26,6 +28,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 DATA_DIR = ROOT_DIR / "data"
 DEBUG_HTML_PATH = DATA_DIR / "debug_student_timetable.html"
+TIMETABLE_JSON_PATH = DATA_DIR / "erp_timetable_data.json"
 
 # Primary target URL for the student personal timetable in ERP
 PRIMARY_TIMETABLE_URL = "https://erp.iitkgp.ac.in/Acad/student/view_stud_time_table.jsp"
@@ -62,6 +65,36 @@ DEFAULT_SLOTS = [
 ]
 
 
+def get_user_parity(user_id: str) -> str:
+    """Determine User Parity ('ODD' or 'EVEN') from the last digit of user_id.
+
+    Example: '25CH10025' -> last digit 5 -> 'ODD'
+             '25CH10024' -> last digit 4 -> 'EVEN'
+    """
+    digits = re.findall(r"\d", user_id or "")
+    if not digits:
+        return "ODD"
+    last_digit = int(digits[-1])
+    return "ODD" if last_digit % 2 == 1 else "EVEN"
+
+
+def _load_course_names_lookup() -> dict[str, str]:
+    """Load subject code -> subject name mapping from local ERP timetable cache if present."""
+    lookup: dict[str, str] = {}
+    if TIMETABLE_JSON_PATH.exists():
+        try:
+            with open(TIMETABLE_JSON_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for item in data.get("department_timetables", []):
+                code = str(item.get("subject_code") or "").strip().upper()
+                name = str(item.get("subject_name") or "").strip().title()
+                if code and name:
+                    lookup[code] = name
+        except Exception:
+            pass
+    return lookup
+
+
 def _format_time_component(raw: str) -> str:
     """Format raw time strings like '8:0:AM' or '8:00 AM' into '08:00 AM'."""
     raw = raw.strip().replace(":AM", " AM").replace(":PM", " PM")
@@ -78,23 +111,78 @@ def _format_time_component(raw: str) -> str:
     return f"{hour:02d}:{minute:02d} {period}"
 
 
-def parse_visual_grid(html: str) -> list[dict]:
-    """Parse the student visual timetable grid HTML.
+def _extract_cell_lines(cell) -> list[str]:
+    """Extract clean lines from an HTML cell by splitting on <br> tags and newlines."""
+    raw_lines = cell.get_text("\n", strip=True).splitlines()
+    cleaned: list[str] = []
+    for line in raw_lines:
+        s = line.strip()
+        if s and s != "\xa0" and s.upper() != "&NBSP;":
+            cleaned.append(s)
+    return cleaned
 
-    Step 1: Extract header row to get the time slots by splitting on hyphen '-'
-            (e.g., '8:0:AM-8:55:AM' -> ('08:00 AM', '08:55 AM')).
-    Step 2: Map each cell to the exact time slot using its column position,
-            handling HTML rowspans and colspans so multi-section rows align perfectly.
-    Step 3: Extract course code, course name, and room from each non-empty cell.
+
+def _parse_lines_into_pairs(lines: list[str]) -> list[tuple[str, str]]:
+    """Parse cell lines structured as:
+        [Course Code 1]
+        [Room 1]
+        [Course Code 2]
+        [Room 2]
+    into a list of (course_code, room) tuples in order.
+    """
+    pairs: list[tuple[str, str]] = []
+    i = 0
+    n = len(lines)
+    while i < n:
+        line = lines[i]
+        code_match = re.search(r"\b([A-Z]{2}\d{5})\b", line)
+        if code_match:
+            code = code_match.group(1).upper()
+            # Check if the next line is the room (and not another course code)
+            if i + 1 < n and not re.search(r"\b([A-Z]{2}\d{5})\b", lines[i + 1]):
+                room = lines[i + 1].strip()
+                pairs.append((code, room))
+                i += 2
+            else:
+                # Fallback if room is on the same line as the course code
+                rem = line.replace(code, "").strip(" -/()|:,")
+                room = rem if rem else "Not specified"
+                pairs.append((code, room))
+                i += 1
+        else:
+            # Handle case where a second room is listed directly below the first room
+            if pairs:
+                prev_code = pairs[-1][0]
+                pairs.append((prev_code, line.strip()))
+            i += 1
+    return pairs
+
+
+def parse_visual_grid(html: str, user_id: str = "25CH10025") -> list[dict]:
+    """Parse the student visual timetable grid HTML with Odd/Even roll parity filtering.
+
+    1. Determine User Parity from the last digit of user_id (ODD vs EVEN).
+    2. Extract header row to get time slots by splitting on '-'.
+    3. Map cells into (day_of_week, slot_col_idx) and split cell content by <br> / newlines:
+           [Course Code 1]
+           [Room 1]
+           [Course Code 2]
+           [Room 2]
+    4. Filter by Parity:
+       - If only one room is listed, save it for everyone.
+       - If two+ rooms are listed (Odd group first, Even group second):
+         - ODD user -> save the first room (index 0)
+         - EVEN user -> save the second room (index 1)
     """
     if not html:
         return []
 
+    parity = get_user_parity(user_id)
     soup = BeautifulSoup(html, "html.parser")
     classes: list[dict] = []
 
-    # Map course codes to course names from registration tables / legends if available
-    course_names_map = {}
+    # Load known course names from local cache + page text
+    course_names_map = _load_course_names_lookup()
     for code_match in re.finditer(
         r"\b([A-Z]{2}\d{5})\b\s*[-:\t|]?\s*([A-Za-z0-9 &,/()\-]+)", soup.get_text()
     ):
@@ -107,10 +195,10 @@ def parse_visual_grid(html: str) -> list[dict]:
                 name_cand,
                 flags=re.I,
             ).strip(" -:|")
-            if len(cleaned_name) > 3:
+            if len(cleaned_name) > 3 and code not in course_names_map:
                 course_names_map[code] = cleaned_name
 
-    # Step 1: Find the table (with border="1" or containing day names)
+    # Step 1: Find the visual timetable table
     table = soup.find("table", border="1")
     if not table:
         for t in soup.find_all("table"):
@@ -136,7 +224,6 @@ def parse_visual_grid(html: str) -> list[dict]:
 
     for cell in header_cells[1:]:
         text = cell.get_text(" ", strip=True)
-        # Split by hyphen '-'
         parts = text.split("-")
         if len(parts) >= 2:
             start_time = _format_time_component(parts[0])
@@ -146,7 +233,7 @@ def parse_visual_grid(html: str) -> list[dict]:
     if not time_slots:
         time_slots = list(DEFAULT_SLOTS)
 
-    # Step 2: Build coordinate grid for 2D cell mapping (handles rowspan/colspan)
+    # Step 2: Build 2D coordinate grid accounting for rowspan and colspan
     occupied = set()
     grid_cells: dict[tuple[int, int], tuple[any, int, int]] = {}
 
@@ -175,16 +262,18 @@ def parse_visual_grid(html: str) -> list[dict]:
 
             c_idx += colspan
 
-    # Step 3: Extract courses safely from the mapped grid
-    # Group by physical day block
+    # Step 3: Aggregate <br>-split lines per (day_of_week, c_idx) in top-to-bottom order.
+    # This handles both:
+    #   (a) Multiple <br>-separated [Course Code, Room] pairs inside a single <td>, AND
+    #   (b) ERP's rowspan=2 day rows where Odd room is in sub-row 0 and Even room is in sub-row 1.
+    slot_lines_map: dict[tuple[str, int], list[str]] = {}
+    slot_colspan_map: dict[tuple[str, int], int] = {}
     current_day = None
 
     for (r_idx, c_idx), (cell, rowspan, colspan) in sorted(grid_cells.items()):
-        # Skip header row
         if r_idx == 0:
             continue
 
-        # Column 0 contains the Day Name (Mon, Tue, etc.)
         if c_idx == 0:
             first_text = cell.get_text(" ", strip=True).upper()
             first_clean = re.sub(r"[^A-Z]", "", first_text)
@@ -194,7 +283,6 @@ def parse_visual_grid(html: str) -> list[dict]:
                     break
             continue
 
-        # If current_day is not identified from col 0, trace upwards in col 0
         day_for_cell = current_day
         if not day_for_cell:
             for cur_r in range(r_idx, 0, -1):
@@ -211,60 +299,56 @@ def parse_visual_grid(html: str) -> list[dict]:
         if not day_for_cell:
             continue
 
-        # Get cell content
-        cell_text = cell.get_text(" ", strip=True)
-        if not cell_text or cell_text == "&nbsp;" or cell_text.isspace():
+        lines = _extract_cell_lines(cell)
+        if not lines:
             continue
 
-        # Extract course code (e.g., CH21205)
-        code_match = re.search(r"\b([A-Z]{2}\d{5})\b", cell_text)
-        if not code_match:
+        key = (day_for_cell, c_idx)
+        if key not in slot_lines_map:
+            slot_lines_map[key] = []
+            slot_colspan_map[key] = colspan
+        slot_lines_map[key].extend(lines)
+
+    # Step 4: Parse lines for each (day, slot) and filter by Odd/Even parity
+    for (day_for_cell, c_idx), lines in slot_lines_map.items():
+        pairs = _parse_lines_into_pairs(lines)
+        if not pairs:
             continue
 
-        course_code = code_match.group(1).upper()
-
-        # Extract room (e.g., NC314, NR123, NC323, NR222)
-        room = "Not specified"
-        room_match = re.search(
-            r"\b([A-Z]{1,2}\d{3}[A-Z]?)\b", cell_text.replace(course_code, "")
-        )
-        if room_match:
-            room = room_match.group(1)
-        elif "/" in cell_text:
-            parts = cell_text.split("/")
-            if len(parts) > 1 and parts[1].strip():
-                room = parts[1].strip()
-
-        # Extract or resolve course name
-        name_cand = (
-            cell_text.replace(course_code, "").replace(room, "").strip(" -/()|:,")
-        )
-        if len(name_cand) > 3 and not re.match(r"^[A-Z]{2}\d{5}$", name_cand):
-            course_name = name_cand
+        # Filter by Parity:
+        # - If only 1 room listed, save it for everyone.
+        # - If 2+ rooms listed (ERP lists Odd group first, Even group second):
+        #   - ODD user -> first room (pairs[0])
+        #   - EVEN user -> second room (pairs[1])
+        if len(pairs) == 1:
+            selected_code, selected_room = pairs[0]
         else:
-            course_name = course_names_map.get(
-                course_code, f"{course_code} Lecture/Lab"
-            )
+            if parity == "ODD":
+                selected_code, selected_room = pairs[0]
+            else:
+                selected_code, selected_room = pairs[1]
 
-        # Correct column mapping: c_idx - 1 gives slot index into time_slots
+        course_name = course_names_map.get(
+            selected_code, f"{selected_code} Lecture/Lab"
+        )
+
         slot_idx = c_idx - 1
+        colspan = slot_colspan_map.get((day_for_cell, c_idx), 1)
         if 0 <= slot_idx < len(time_slots):
             start_time, end_time = time_slots[slot_idx]
-            # Handle colspan across multiple hours if any
             if colspan > 1:
                 end_slot_idx = min(slot_idx + colspan - 1, len(time_slots) - 1)
                 end_time = time_slots[end_slot_idx][1]
         else:
             start_time, end_time = ("08:00 AM", "08:55 AM")
 
-        # Avoid exact duplicates if table repeated sections
         entry = {
-            "course_code": course_code,
+            "course_code": selected_code,
             "course_name": course_name,
             "day_of_week": day_for_cell,
             "start_time": start_time,
             "end_time": end_time,
-            "location": room,
+            "location": selected_room,
         }
         if entry not in classes:
             classes.append(entry)
@@ -321,49 +405,61 @@ async def run_sync():
     print("  IIT KGP Personalized Timetable Sync (view_stud_time_table)")
     print("=========================================================")
 
-    # Step 1: Authenticate using iitkgp-erp-login
-    session = requests.Session()
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    # Support offline re-sync from cached debug_student_timetable.html via --cached
+    if "--cached" in sys.argv and DEBUG_HTML_PATH.exists():
+        user_id = (
+            os.environ.get("ROLL_NUMBER")
+            or (sys.argv[sys.argv.index("--cached") + 1] if len(sys.argv) > sys.argv.index("--cached") + 1 else "25CH10025")
+        ).strip().upper()
+        parity = get_user_parity(user_id)
+        print(f"ℹ️ Using cached HTML from {DEBUG_HTML_PATH}")
+        print(f"Synchronizing schedule for student: {user_id} (Parity: {parity})")
+        html_content = DEBUG_HTML_PATH.read_text(encoding="utf-8")
+    else:
+        # Step 1: Authenticate using iitkgp-erp-login
+        session = requests.Session()
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
-    try:
-        sessionToken, ssoToken = erp.login(headers, session)
-        print("✅ Login successful.\n")
-    except Exception as e:
-        print(f"❌ Login failed: {e}")
-        sys.exit(1)
+        try:
+            sessionToken, ssoToken = erp.login(headers, session)
+            print("✅ Login successful.\n")
+        except Exception as e:
+            print(f"❌ Login failed: {e}")
+            sys.exit(1)
 
-    user_id = (
-        getattr(erp, "ROLL_NUMBER", None)
-        or os.environ.get("ROLL_NUMBER")
-        or ""
-    ).strip().upper()
-    if not user_id:
-        user_id = input("Confirm your Roll Number (e.g. 25CH10025): ").strip().upper()
+        user_id = (
+            getattr(erp, "ROLL_NUMBER", None)
+            or os.environ.get("ROLL_NUMBER")
+            or ""
+        ).strip().upper()
+        if not user_id:
+            user_id = input("Confirm your Roll Number (e.g. 25CH10025): ").strip().upper()
 
-    print(f"Synchronizing schedule for student: {user_id}")
+        parity = get_user_parity(user_id)
+        print(f"Synchronizing schedule for student: {user_id} (Parity: {parity})")
 
-    # Step 2: Fetch the Personalized Timetable
-    html_content = fetch_student_timetable_html(session)
+        # Step 2: Fetch the Personalized Timetable
+        html_content = fetch_student_timetable_html(session)
 
-    # Step 5: Debug Fallback - save scraped HTML to data/debug_student_timetable.html
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with open(DEBUG_HTML_PATH, "w", encoding="utf-8") as f:
-        f.write(html_content or "<!-- No timetable HTML content fetched -->")
-    print(f"ℹ️ Dumped debug HTML to {DEBUG_HTML_PATH}")
+        # Step 5: Debug Fallback - save scraped HTML to data/debug_student_timetable.html
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with open(DEBUG_HTML_PATH, "w", encoding="utf-8") as f:
+            f.write(html_content or "<!-- No timetable HTML content fetched -->")
+        print(f"ℹ️ Dumped debug HTML to {DEBUG_HTML_PATH}")
 
     if not html_content:
         print("❌ Could not load timetable HTML. Check debug_student_timetable.html.")
         return
 
-    # Step 3: Parse the Visual Grid with exact time slot alignment
-    classes = parse_visual_grid(html_content)
-    print(f"Parsed {len(classes)} classes from student timetable.")
+    # Step 3: Parse the Visual Grid with exact time slot alignment and Odd/Even parity filtering
+    classes = parse_visual_grid(html_content, user_id=user_id)
+    print(f"Parsed {len(classes)} personalized ({parity}) classes from student timetable.")
 
-    # Step 4: Save to SQLite (campus_cache.db -> user_classes)
+    # Step 4: Clear existing rows for user_id and insert newly filtered classes into SQLite
     if classes:
         await insert_classes(user_id, classes)
         print(
-            f"✅ Successfully inserted {len(classes)} classes for {user_id} into {DB_PATH}"
+            f"✅ Successfully replaced and inserted {len(classes)} classes for {user_id} ({parity}) into {DB_PATH}"
         )
         saved = await get_classes(user_id)
         print(f"Verified {len(saved)} total classes in SQLite for {user_id}.")
