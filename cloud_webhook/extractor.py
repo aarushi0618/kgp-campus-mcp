@@ -33,22 +33,22 @@ Guidelines:
 2. Output ONLY the raw JSON object. Do not enclose in markdown code fences or add explanatory text.
 """
 
-DEADLINE_EXTRACTION_PROMPT = """Extract the academic deadline. Calculate a baseline urgency_weight: Exam=5.0, Assignment/Lab=4.0, Quiz=3.5, General=1.0. Return strict JSON: {{is_academic, title, due_date, due_time, course_code, urgency_weight}}
+DEADLINE_EXTRACTION_PROMPT = """You are an academic deadline extractor for IIT Kharagpur.
+Analyze the following email text and determine if it contains an academic deadline (exam, assignment, quiz, lab submission).
 
 Email Text:
 \"\"\"{email_text}\"\"\"
 
-Schema Specification:
+Return ONLY a valid JSON object with this exact schema:
 {{
-  "is_academic": true or false (boolean indicating if the email contains an academic deadline, exam, quiz, assignment, or lab submission),
-  "title": "Short title of the deadline (string, or null if not academic)",
-  "due_date": "YYYY-MM-DD format (string, or null if unknown)",
-  "due_time": "HH:MM in 24-hour format, default '23:59' if only a date is mentioned (string, or null)",
-  "course_code": "Course code like 'CH21205' or 'CS21203' if mentioned (string, or null)",
-  "urgency_weight": 5.0 for Exam, 4.0 for Assignment/Lab, 3.5 for Quiz, 1.0 for General (float)
+  "is_academic": true/false (MUST be true if the text mentions an assignment, exam, quiz, test, or submission),
+  "title": "Short descriptive title of the deadline",
+  "due_date": "YYYY-MM-DD format (if the year is missing, assume 2026)",
+  "due_time": "HH:MM in 24-hour format (default to '23:59' if not mentioned)",
+  "course_code": "Course code like 'CH21205' (or null if not mentioned)",
+  "urgency_weight": 5.0 for Exam, 4.0 for Assignment/Lab, 3.5 for Quiz, 1.0 for General
 }}
-
-Output ONLY the raw JSON object without markdown formatting.
+Output ONLY raw JSON. No markdown.
 """
 
 
@@ -128,7 +128,7 @@ async def extract_event_details(text: str) -> dict[str, Any]:
         from google import genai
         from google.genai import types
 
-        model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
         client = genai.Client(api_key=api_key)
 
         prompt = EXTRACTION_PROMPT.format(message_text=text.strip())
