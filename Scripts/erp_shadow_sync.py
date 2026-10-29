@@ -19,6 +19,8 @@ import requests
 from kgp_mcp.infrastructure.database import (
     insert_classes,
     get_classes,
+    insert_classes_sync,
+    get_classes_sync,
     DB_PATH,
     ROOT_DIR,
 )
@@ -400,7 +402,7 @@ def fetch_student_timetable_html(session: requests.Session) -> str:
     return ""
 
 
-async def run_sync():
+def run_sync_blocking():
     print("=========================================================")
     print("  IIT KGP Personalized Timetable Sync (view_stud_time_table)")
     print("=========================================================")
@@ -457,11 +459,11 @@ async def run_sync():
 
     # Step 4: Clear existing rows for user_id and insert newly filtered classes into SQLite
     if classes:
-        await insert_classes(user_id, classes)
+        insert_classes_sync(user_id, classes)
         print(
             f"✅ Successfully replaced and inserted {len(classes)} classes for {user_id} ({parity}) into {DB_PATH}"
         )
-        saved = await get_classes(user_id)
+        saved = get_classes_sync(user_id)
         print(f"Verified {len(saved)} total classes in SQLite for {user_id}.")
     else:
         print(
@@ -470,8 +472,12 @@ async def run_sync():
         )
 
 
+async def run_sync():
+    run_sync_blocking()
+
+
 def main():
-    asyncio.run(run_sync())
+    run_sync_blocking()
 
 
 if __name__ == "__main__":

@@ -955,6 +955,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pypdf" },
     { name = "pypdf2" },
+    { name = "python-dotenv" },
     { name = "requests" },
     { name = "tenacity" },
 ]
@@ -981,6 +982,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pypdf", specifier = ">=6.19.0" },
     { name = "pypdf2", specifier = ">=3.0.1" },
+    { name = "python-dotenv", specifier = ">=1.2.4" },
     { name = "requests", specifier = ">=2.34.2" },
     { name = "tenacity", specifier = ">=9.1.4" },
 ]
@@ -1913,6 +1915,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/97/c2/28b9f5b955ff2bcd4727a6f768e2ca9b586cd7c37b95ea5f7b9b873ac7b3/pytest_mock-3.17.0.tar.gz", hash = "sha256:e36576e0985e01027e999891e7a966c67822d40c89ef1b4c8b6e22737e3590b4", size = 43064, upload-time = "2026-10-17T16:21:42.435Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e8/ea/47fbdc8f37410956fd445720e927589b1e2a47772c5f28109f0ce2fa26d9/pytest_mock-3.17.0-py3-none-any.whl", hash = "sha256:1b82aa4b37137248bd687055e109723debeb07b489de1565297dc9589c5f2d6b", size = 11248, upload-time = "2026-10-17T16:21:41.265Z" },
+]
+
+[[package]]
+name = "python-dotenv"
+version = "1.2.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/74/26/2fbeedb218a787a5eea551c7532cac4e009f83d689dd2faa0d0353473f86/python_dotenv-1.2.4.tar.gz", hash = "sha256:f0d53e69935a851c0dcc78f3ab7aaccd8cabef0b92382b576b824212902873c0", size = 60824, upload-time = "2026-10-01T05:36:10Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/d1/38f3a3405989a89ac18390803e70c6ad7c7760da4f9b83cbeca0c44a0c72/python_dotenv-1.2.4-py3-none-any.whl", hash = "sha256:42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc", size = 23266, upload-time = "2026-10-01T05:36:08.633Z" },
 ]
 
 [[package]]
